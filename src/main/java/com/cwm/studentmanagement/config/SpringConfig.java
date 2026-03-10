@@ -2,52 +2,87 @@ package com.cwm.studentmanagement.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /*
  * Copyright (c) 2026 Mahesh Shet
  * Licensed under the MIT License.
+ *
+ * Spring Boot = REST API only. React/Vite handles ALL frontend routing.
+ *
+ * NO loginPage() — Spring не рендерит никакую страницу.
+ * POST /login  → Spring Security обрабатывает форму, возвращает 200 JSON
+ * GET  /login  → не существует на бэкенде, React сам показывает Login компонент
  */
 
 @Configuration
 @EnableWebSecurity
 public class SpringConfig {
 
-    private static final String[] PUBLIC_PATH = {
-            "/login",
-            "/react/**",   // React build artifacts (JS/CSS/assets)
-            "/error"
-    };
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Disable CSRF for /api/** — React SPA on the same origin
-                // uses session cookies, so same-site policy protects us.
-                // CSRF protection is kept for the /login form POST.
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/api/**")
-                )
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**", "/login", "/logout"))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(PUBLIC_PATH).permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/login", "/logout").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().permitAll()
+                )
+                // Все неавторизованные запросы к /api → 401, не редирект
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
                 )
                 .formLogin(form -> form
-                        .loginPage("/login")
+                        // НЕТ .loginPage() — Spring не пытается рендерить GET /login
                         .loginProcessingUrl("/login")
-                        .defaultSuccessUrl("/dashboard", true)
+                        .successHandler((req, res, auth) -> {
+                            res.setStatus(200);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"success\":true}");
+                        })
+                        .failureHandler((req, res, ex) -> {
+                            res.setStatus(401);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"error\":\"Invalid username or password\"}");
+                        })
                         .permitAll()
                 )
                 .logout(logout -> logout
-                        .logoutSuccessUrl("/login?logout")
+                        .logoutUrl("/logout")
+                        .logoutSuccessHandler((req, res, auth) -> {
+                            res.setStatus(200);
+                            res.setContentType("application/json");
+                            res.getWriter().write("{\"success\":true}");
+                        })
                         .permitAll()
                 );
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     @Bean

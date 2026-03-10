@@ -11,8 +11,7 @@ Spring Boot REST API for the Student Management System. Handles authentication, 
 | Framework | Spring Boot 3, Spring MVC |
 | Security | Spring Security, BCrypt |
 | Persistence | Spring Data JPA, Hibernate |
-| Database (dev) | MySQL 8 |
-| Database (prod) | PostgreSQL (Render) |
+| Database | MySQL 8 |
 | Mapping | ModelMapper |
 | Build | Maven |
 | Container | Docker (multi-stage build) |
